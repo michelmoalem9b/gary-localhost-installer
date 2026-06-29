@@ -1,6 +1,7 @@
 use crate::manifest::{HealthCheck, ServiceDef};
 use serde::Serialize;
 use std::collections::HashMap;
+#[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -100,6 +101,13 @@ impl ServiceManager {
         let mut result = value.to_string();
 
         // Resolve ${APPDATA}
+                let settings = crate::read_app_settings();
+                if let Some(md) = settings.models_dir {
+                    if !md.trim().is_empty() {
+                        return md;
+                    }
+                }
+
         if let Ok(appdata) = std::env::var("APPDATA") {
             result = result.replace("${APPDATA}", &appdata);
         }
@@ -113,6 +121,13 @@ impl ServiceManager {
         // Resolve ${MODELS_DIR} — defaults to %APPDATA%/Gary4JUCE/models
         if result.contains("${MODELS_DIR}") {
             let models_dir = std::env::var("MODELS_DIR").unwrap_or_else(|_| {
+                let settings = crate::read_app_settings();
+                if let Some(md) = settings.models_dir {
+                    if !md.trim().is_empty() {
+                        return md;
+                    }
+                }
+
                 std::env::var("APPDATA")
                     .map(|a| format!("{}\\Gary4JUCE\\models", a))
                     .unwrap_or_default()
@@ -359,7 +374,8 @@ impl ServiceManager {
         // Prevent console window on Windows
         #[cfg(target_os = "windows")]
         {
-            use std::os::windows::process::CommandExt;
+            #[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
 
@@ -393,10 +409,21 @@ impl ServiceManager {
             // Use taskkill /T to kill the entire process tree on Windows.
             // This ensures subprocesses (e.g. carey_wrapper -> api_server.py) are also killed.
             let pid = running.process.id();
+            #[cfg(target_os = "windows")]
+            {
+
             let _ = std::process::Command::new("taskkill")
                 .args(["/T", "/F", "/PID", &pid.to_string()])
                 .creation_flags(0x08000000) // CREATE_NO_WINDOW
                 .output();
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = std::process::Command::new("kill")
+                    .args(["-9", &pid.to_string()])
+                    .output();
+            }
+
             let _ = running.process.wait();
             self.errors.remove(service_id);
             Ok(())

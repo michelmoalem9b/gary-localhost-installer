@@ -412,6 +412,13 @@ impl ModelManager {
 
     /// Get the Foundation models directory (%APPDATA%/Gary4JUCE/models)
     fn foundation_models_dir() -> std::path::PathBuf {
+        let settings = crate::read_app_settings();
+        if let Some(md) = settings.models_dir {
+            if !md.trim().is_empty() {
+                return std::path::PathBuf::from(md);
+            }
+        }
+
         let appdata = std::env::var("APPDATA").unwrap_or_else(|_| {
             let home = std::env::var("USERPROFILE").unwrap_or_else(|_| ".".to_string());
             format!("{}\\AppData\\Roaming", home)

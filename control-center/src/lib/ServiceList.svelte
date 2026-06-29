@@ -22,7 +22,7 @@
     build_status: BuildStatus | null;
   }
 
-  let { services, selectedServiceId, hfTokenConfigured, onSelect, onShowModels, onManageCareyLoras, onTrainCareyAce, onManageSa3Loras, onTrainSa3Lora }: {
+  let { services, selectedServiceId, hfTokenConfigured, onSelect, onShowModels, onManageCareyLoras, onTrainCareyAce, onManageSa3Loras, onTrainSa3Lora, onOpenSettings }:  {
     services: ServiceInfo[];
     selectedServiceId: string | null;
     hfTokenConfigured: boolean;
@@ -32,6 +32,7 @@
     onTrainCareyAce: () => void;
     onManageSa3Loras: () => void;
     onTrainSa3Lora: () => void;
+    onOpenSettings?: () => void;
   } = $props();
 
   async function rebuildAll() {
@@ -49,7 +50,10 @@
 <div class="service-list">
   <div class="list-header">
     <span class="label">services</span>
-    <button onclick={rebuildAll}>rebuild all envs</button>
+    <div class="header-actions">
+      <button onclick={rebuildAll}>rebuild all envs</button>
+      <button class="icon-btn" onclick={onOpenSettings} title="Settings" aria-label="Settings">⚙️</button>
+    </div>
   </div>
   {#each services as service (service.id)}
     <ServiceRow
@@ -83,6 +87,23 @@
     align-items: center;
     padding: 8px 12px;
     margin-bottom: 4px;
+  }
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+    line-height: 1;
+    color: var(--text-secondary);
+  }
+  .icon-btn:hover {
+    color: var(--text-primary);
   }
   .label {
     font-size: 11px;

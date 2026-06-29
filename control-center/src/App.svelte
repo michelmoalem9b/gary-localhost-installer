@@ -16,6 +16,7 @@
   import Sa3LoraTrainingModal from "./lib/Sa3LoraTrainingModal.svelte";
   import CloseBehaviorModal from "./lib/CloseBehaviorModal.svelte";
   import AppUpdateModal from "./lib/AppUpdateModal.svelte";
+  import SettingsModal from "./lib/SettingsModal.svelte";
 
   interface BuildStatus {
     building: boolean;
@@ -56,6 +57,8 @@
     autoCheckUpdates: boolean;
     skippedUpdateVersion: string | null;
     lastUpdateCheckEpochMs: number | null;
+    modelsDir?: string | null;
+    appsDir?: string | null;
   }
 
   interface AppUpdateCheck {
@@ -99,6 +102,7 @@
     lastUpdateCheckEpochMs: null,
   });
   let closeRequestModalOpen = $state(false);
+  let settingsModalOpen = $state(false);
   let rememberCloseChoice = $state(false);
   let resolvingCloseRequest = $state(false);
   let updateCheckBusy = $state(false);
@@ -348,6 +352,24 @@
     appSettings = { ...appSettings, sa3Loudness: settings };
   }
 
+  function openSettings() {
+    settingsModalOpen = true;
+  }
+
+  function closeSettings() {
+    settingsModalOpen = false;
+  }
+
+  async function savePathSettings(modelsDir: string | null, appsDir: string | null) {
+    try {
+      appSettings = await invoke<AppSettings>("save_app_settings", {
+        settings: { modelsDir, appsDir },
+      });
+    } catch (e) {
+      console.error("Failed to save path settings:", e);
+    }
+  }
+
   function onCloseRequestEvent() {
     closeRequestModalOpen = true;
     rememberCloseChoice = false;
@@ -468,6 +490,7 @@
         onTrainCareyAce={showCareyAceTraining}
         onManageSa3Loras={showSa3Loras}
         onTrainSa3Lora={showSa3LoraTraining}
+        onOpenSettings={openSettings}
       />
     </div>
     <div class="divider"></div>
@@ -553,6 +576,14 @@
     serviceEnvExists={sa3Service?.env_exists ?? false}
     onClose={closeSa3Loras}
   />
+  <SettingsModal
+    open={settingsModalOpen}
+    modelsDir={appSettings.modelsDir ?? null}
+    appsDir={appSettings.appsDir ?? null}
+    onClose={closeSettings}
+    onSave={savePathSettings}
+  />
+
   <Sa3LoraTrainingModal
     open={sa3LoraTrainingModalOpen}
     serviceStatus={sa3Service?.status ?? "stopped"}
