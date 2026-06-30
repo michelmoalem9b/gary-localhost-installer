@@ -108,6 +108,10 @@ struct AppSettings {
     skipped_update_version: Option<String>,
     #[serde(default)]
     last_update_check_epoch_ms: Option<u64>,
+    #[serde(default)]
+    pub models_dir: Option<String>,
+    #[serde(default)]
+    pub apps_dir: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -121,6 +125,8 @@ impl Default for AppSettings {
             auto_check_updates: default_auto_check_updates(),
             skipped_update_version: None,
             last_update_check_epoch_ms: None,
+            models_dir: None,
+            apps_dir: None,
         }
     }
 }
@@ -160,6 +166,10 @@ struct AppSettingsPatch {
     auto_check_updates: Option<bool>,
     #[serde(default)]
     skipped_update_version: Option<Option<String>>,
+    #[serde(default)]
+    models_dir: Option<Option<String>>,
+    #[serde(default)]
+    apps_dir: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -469,6 +479,16 @@ fn gary4juce_runtime_root() -> PathBuf {
     PathBuf::from(appdata).join("Gary4JUCE")
 }
 
+pub(crate) fn repo_root_for_services(runtime_root: &std::path::Path) -> PathBuf {
+    let settings = read_app_settings();
+    if let Some(apps_dir) = settings.apps_dir {
+        if !apps_dir.trim().is_empty() {
+            return PathBuf::from(apps_dir);
+        }
+    }
+    runtime_root.to_path_buf()
+}
+
 fn gary4local_local_data_root() -> PathBuf {
     let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| {
         let home = std::env::var("USERPROFILE").unwrap_or_else(|_| ".".to_string());
@@ -548,7 +568,7 @@ fn configure_webview2_user_data_folder() -> Option<PathBuf> {
 }
 
 fn runtime_services_dir(runtime_root: &Path) -> PathBuf {
-    runtime_root.join("services")
+    repo_root_for_services(runtime_root).join("services")
 }
 
 fn carey_runtime_dir() -> PathBuf {
@@ -584,7 +604,7 @@ fn carey_training_current_job_path() -> PathBuf {
 }
 
 fn carey_checkpoint_dir(runtime_root: &Path) -> PathBuf {
-    runtime_root.join("services").join("carey").join("checkpoints")
+    repo_root_for_services(runtime_root).join("services").join("carey").join("checkpoints")
 }
 
 fn sa3_runtime_dir() -> PathBuf {
@@ -939,7 +959,7 @@ fn read_hf_token() -> Option<String> {
         })
 }
 
-fn read_app_settings() -> AppSettings {
+pub(crate) fn read_app_settings() -> AppSettings {
     let path = app_settings_path();
     let raw = match std::fs::read_to_string(&path) {
         Ok(raw) => raw,
@@ -1006,6 +1026,13 @@ fn merge_app_settings(patch: AppSettingsPatch) -> AppSettings {
     }
 
     if let Some(close_action_on_x) = patch.close_action_on_x {
+    if let Some(models_dir) = patch.models_dir {
+        current.models_dir = models_dir;
+    }
+    if let Some(apps_dir) = patch.apps_dir {
+        current.apps_dir = apps_dir;
+    }
+
         current.close_action_on_x = close_action_on_x;
     }
 
@@ -2881,7 +2908,7 @@ pub fn run() {
                     log::error!("{}", message);
                     append_startup_diagnostic(&message);
 
-                    let manifest_path = runtime_root
+                    let manifest_path = repo_root_for_services(&runtime_root)
                         .join("services")
                         .join("manifests")
                         .join("services.json");
@@ -2892,13 +2919,13 @@ pub fn run() {
                 runtime_root
             };
 
-            let manifest_path = runtime_root
+            let manifest_path = repo_root_for_services(&runtime_root)
                 .join("services")
                 .join("manifests")
                 .join("services.json");
             log::info!("Loading manifest from: {}", manifest_path.display());
 
-            let services = match manifest::load_manifest(&manifest_path) {
+            let mut services = match manifest::load_manifest(&manifest_path) {
                 Ok(s) => s,
                 Err(e) => {
                     log::error!("Failed to load manifest: {}", e);
@@ -2906,9 +2933,22 @@ pub fn run() {
                 }
             };
 
+            let custom_manifest_path = gary4juce_runtime_root().join("custom_services.json");
+            if custom_manifest_path.exists() {
+                log::info!("Loading custom manifest from: {}", custom_manifest_path.display());
+                match manifest::load_manifest(&custom_manifest_path) {
+                    Ok(mut custom_services) => {
+                        services.append(&mut custom_services);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to load custom manifest: {}", e);
+                    }
+                }
+            }
+
             let manager = Arc::new(Mutex::new(ServiceManager::new(
                 services,
-                runtime_root.clone(),
+                repo_root_for_services(&runtime_root),
             )));
             app.manage(manager.clone());
 
@@ -3157,6 +3197,7 @@ pub fn run() {
             check_for_app_update,
             install_app_update,
             resolve_close_request,
+            open_custom_services_config,
             open_url,
             reveal_path,
         ])
